@@ -161,7 +161,9 @@
   function compose(prompt, opts) {
     opts = opts || {};
     var sentences = opts.sentences;
-    var jw = opts.jitter === undefined ? 1 : (opts.jitter === true ? 1 : (opts.jitter === false ? 0 : opts.jitter));
+    // 温度つきソフトマックス標本抽出 (LLM の temperature sampling と同じ形).
+    // T=0 で決定論 (argmax)。既定 0.8。
+    var T = opts.temperature !== undefined ? opts.temperature : (opts.jitter === false ? 0 : 0.8);
     var topics = detectTopics(prompt || "");
     var nonce = opts.nonce === undefined ? 0 : opts.nonce;
     var ph = (promptHash(prompt || "") ^ Math.imul(nonce + 1, 2654435761)) >>> 0;
@@ -177,26 +179,28 @@
           part.want.forEach(function (t) {
             if (topics.indexOf(t) >= 0) e += w[BASE_N + g * TN + TIDX[t]];   // affinity (w 領域2)
           });
-          if (jw > 0 && role.name !== "締め") e += (hash01(ph, ri * 31 + ci, s2) - 0.5) * 3.2 * jw;
           return e;
         });
         var best = 0;
         for (var ci2 = 1; ci2 < scores.length; ci2++) if (scores[ci2] > scores[best]) best = ci2;
-        if (jw > 0) {
-          var pool = [];
-          role.parts.forEach(function (part, ci3) { if (scores[ci3] > scores[best] - 1.9) pool.push(ci3); });
-          best = pool[Math.floor(hash01(s2 * 97 + ri, ph, 777) * pool.length) % pool.length];
+        var probs = role.parts.map(function (part, ci3) { return ci3 === best ? 1 : 0; });
+        if (T > 0) {
+          var Z = 0;
+          probs = scores.map(function (sc) { var e2 = Math.exp((sc - scores[best]) / T); Z += e2; return e2; });
+          for (var p2 = 0; p2 < probs.length; p2++) probs[p2] /= Z;
+          var rrr = hash01(ph, s2 * 53 + ri, 907), acc3 = 0;
+          for (var ci4 = 0; ci4 < probs.length; ci4++) { acc3 += probs[ci4]; if (rrr <= acc3) { best = ci4; break; } }
         }
         var chosen = role.parts[best];
         used[ROLE_OFF[ri] + best] = 1;
         var order = role.parts.map(function (part, ci4) { return ci4; });
         order.sort(function (a, b) { return scores[b] - scores[a]; });
-        var top = order.slice(0, 3).map(function (ci5) { return [role.parts[ci5].t.slice(0, 6), scores[ci5]]; });
+        var top = order.slice(0, 3).map(function (ci5) { return [role.parts[ci5].t.slice(0, 6), scores[ci5], probs[ci5]]; });
         if (prevTail === ",") out += "、";
         out += chosen.t;
         prevTail = role.name === "締め" ? "。" : ",";
         if (prevTail === "。" && s2 < sentences - 1) out += "\n";
-        log.push({ role: role.name, t: chosen.t, top: top, topics: topics.slice(), scored: role.parts.length });
+        log.push({ role: role.name, t: chosen.t, top: top, topics: topics.slice(), scored: role.parts.length, temp: T });
       });
     }
     return { text: out, log: log, topics: topics, weights: WEIGHTS };

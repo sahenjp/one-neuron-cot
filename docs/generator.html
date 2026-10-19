@@ -43,7 +43,7 @@
 <body>
 <div class="wrap">
   <h1>1ニューロン文章ジェネレータ（構成型・学習不要） <a href="https://arxiv.org/abs/2610.17283" target="_blank" rel="noopener">arXiv:2610.17283</a></h1>
-  <p class="sub">ニューロン1個ぶんの<b>重みベクトル1本</b>だけで日本語の文を組み立てます。学習データもプリセット選択肢もなし。ゆらぎONなら<b>同じ入力でも実行するたびに違う文</b>が出ます。下の「説明」を開いてみてください。</p>
+  <p class="sub">ニューロン1個ぶんの<b>重みベクトル1本</b>だけで日本語の文を組み立てます。学習データもプリセット選択肢もなし。温度スライダ（0=決定論, 既定0.7）でランダム性を調整でき、<b>同じ入力でも実行のたびに違う文</b>になります。初めての人は下の「説明」からどうぞ。</p>
   <div class="card">
     <h2>プロンプト（気分・話題を自由に）</h2>
     <div class="row">
@@ -51,7 +51,7 @@
       <button class="prim" id="gen">生成する</button>
       <button class="gray" id="halt">停止</button>
       <label class="muted"><input type="checkbox" id="showInner"> 内部を表示</label>
-      <label class="muted"><input type="checkbox" id="temp" checked> ゆらぎ（毎回変化）</label>
+      <label class="muted">温度 <input type="range" id="temp" min="0" max="1.2" step="0.05" value="0.7" style="width:120px"> <span id="tempv">0.70</span>（0=決定論）</label>
     </div>
     <div class="row" id="stats" style="margin-top:10px"></div>
   </div>
@@ -78,8 +78,9 @@
       <p>話題が1つも見つからない場合は、全候補を基本スコアだけで比較します（このとき候補間の差は小さいので、ゆらぎが効いて多様な文になります）。</p>
     </details>
     <details>
-      <summary>「ゆらぎ」とは？なぜ毎回変わる？</summary>
-      <p>上位候補どうしのエネルギー差が小さいとき、どれを採るかは実質「好み」の領域です。ゆらぎONでは、<b>最上位から1.9以内に入る候補の中を疑似乱数で選び</b>ます。乱数の種に実行ごとのノンス（連番+時刻）を混ぜるので、同じ入力でも実行のたびに別の文になります。同一フレーズの再使用は減点（−2.5）し、1回の出力内での重複も避けています。</p>
+      <summary>温度（ランダム性）とは？なぜ毎回変わる？</summary>
+      <p>ChatGPTなどのLLMと同じ<b>温度つきソフトマックス標本抽出</b>を、ニューロンのエネルギーに対して行います。候補 <code>c</code> が選ばれる確率は <code>exp(E[c]/T) / Σ exp(E/T)</code> で、温度 <code>T</code>（スライダ）を上げるほど幅広い候補が選ばれます。乱数種に実行ごとのノンス（連番+時刻）を混ぜるので、同じ入力でも毎回別の文になります。</p>
+      <p><code>T=0</code> で完全な決定論（最もエネルギーの高い候補だけを毎回選ぶ）に戻ります。同一フレーズの再使用は −2.5 減点し、1回の出力内での重複を防いでいます。</p>
       <p>ゆらぎをOFFにすると完全な決定論（同じ入力 → 必ず同じ文）で、学習なしの再現実験として使えます。</p>
     </details>
     <details>
@@ -98,12 +99,30 @@
     論文: <a href="https://arxiv.org/abs/2610.17283" target="_blank" rel="noopener">The Surprising Expressivity of a Single Neuron with Autoregressive Chain-of-Thought</a>
   </footer>
 </div>
+<script src="app.js"></script>
 <script src="grammar.js"></script>
 <script>
 (function () {
   "use strict";
   var G = window.OneNeuronGrammar;
   var timer = null, runSeq = 0;
+  var PAPER = "";
+  try {
+    var ON = window.OneNeuron;
+    if (ON) {
+      var plan = ON.buildPlan(ON.adder(3));
+      var st = ON.checkAll(plan);
+      var sS = 72;
+      var aArr = ON.sidonGolomb(2 * sS);
+      var tArr = aArr.slice(sS);
+      var TT = tArr[sS - 1];
+      var Tprim = TT + aArr[sS - 1];
+      var dd = 2 * TT + Math.ceil(26 / sS) * Tprim;
+      PAPER =
+        "<span class='chip'>論文の構成法（Sidon）実測: 3bit加算器 = ゲート <b>" + plan.s + "</b> → 次元 d=<b>" + plan.d + "</b>, 生成長 T=<b>" + plan.T + "</b>, 全入力一致 <b>" + st.e2e + "/64</b></span>" +
+        "<span class='chip'>本ページの採点回路をSidon構成した想定: ゲート s=<b>" + sS + "</b> → T=<b>" + TT + "</b>, d=<b>" + dd + "</b></span>";
+    }
+  } catch (e2) { PAPER = ""; }
   function $(id) { return document.getElementById(id); }
   function stopGen() {
     if (timer) clearInterval(timer);
@@ -114,16 +133,18 @@
   function gen() {
     if (timer) { stopGen(); return; }
     var prompt = $("prompt").value;
-    var jit = $("temp").checked;
+    var tempv = parseFloat($("temp").value);
     var nonce = ((Date.now() ^ Math.imul(++runSeq, 0x9E3779B9)) >>> 0);
-    var r = G.compose(prompt, { jitter: jit, nonce: nonce });
+    var r = G.compose(prompt, { temperature: tempv, nonce: nonce });
     var topicText = r.topics.length ? r.topics.join("/") : "なし（基本スコアのみで採点）";
     $("stats").innerHTML =
       "<span class='chip'>トピック検出 = <b>" + topicText + "</b></span>" +
       "<span class='chip'>フレーズ候補 = <b>" + r.weights.baseCount + "</b></span>" +
       "<span class='chip'>重み要素 = <b>" + r.weights.total + "</b>（構成済）</span>" +
       "<span class='chip'>学習 = <b>なし</b></span>" +
-      "<span class='chip'>重みベクトル = <b>1本（全スロット共有）</b></span>";
+      "<span class='chip'>重みベクトル = <b>1本（全スロット共有）</b></span>" +
+      "<span class='chip'>温度 T = <b>" + tempv.toFixed(2) + "</b>" + (tempv <= 0 ? "（決定論）" : "（ソフトマックス標本）") + "</span>" +
+      PAPER;
     var text = r.text, shown = 0;
     var offs = [], pos = 0;
     r.log.forEach(function (e) { offs.push(pos); pos += e.t.length + (e.role === "締め" ? 0 : 1); });
@@ -140,7 +161,7 @@
         for (var i = 0; i < r.log.length; i++) {
           var eLen = r.log[i].t.length + (r.log[i].role === "締め" ? 0 : 1);
           if (shown >= offs[i] + eLen) {
-            var tops = r.log[i].top.map(function (t2) { return t2[0] + "(" + t2[1].toFixed(1) + ")"; }).join(" ");
+            var tops = r.log[i].top.map(function (t2) { return t2[0] + " " + Math.round(100 * (t2[2] || 0)) + "%"; }).join(" ");
             done.push("[" + r.log[i].role + "] " + r.log[i].t + "  候補: " + tops);
           }
         }
@@ -149,6 +170,7 @@
       if (shown >= text.length) stopGen();
     }, 45);
   }
+  $("temp").oninput = function () { $("tempv").textContent = parseFloat(this.value).toFixed(2); };
   $("gen").onclick = gen;
   $("halt").onclick = stopGen;
 })();
