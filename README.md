@@ -39,7 +39,7 @@ python3 run.py distill     # 「答えだけ vs CoTあり」学習非対称の�
 python3 run.py story 101   # ニューロン1個が気分プロンプトから一文を生成 (プロンプト0〜7で8通り)
 ```
 
-ブラウザで試すなら: **[1ニューロンCPUプレイグラウンド](https://sahenjp.github.io/one-neuron-cot/)** (プログラム→回路→単一ニューロンの構成を可視化。pythonの正解トークン列と相互検証済み)。文章生成のみ試すなら**: [1ニューロン文章ジェネレータ](https://sahenjp.github.io/one-neuron-cot/generator.html)** (学習データを貼ると重みを学習し、入力の続きを生成)。
+ブラウザで試すなら: **[1ニューロンCPUプレイグラウンド](https://sahenjp.github.io/one-neuron-cot/)** (プログラム→回路→単一ニューロンの構成を可視化。pythonの正解トークン列と相互検証済み)。文章生成のみ試すなら**: [1ニューロン文章ジェネレータ](https://sahenjp.github.io/one-neuron-cot/generator.html)** (学習データ不要・重みは構成型。入力した気分や話題から一文を生成)。
 
 `python3 run.py` の出力:
 
