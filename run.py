@@ -92,6 +92,13 @@ def main(argv: list[str]) -> None:
         rows = run_demo()
         ok = all(row["cot_acc"] == 1.0 for row in rows)
         sys.exit(0 if ok else 1)
+    elif cmd == "story":
+        from one_neuron_cot.story import print_story
+        if len(argv) > 1 and len(argv[1]) == 3:
+            print_story([int(c) for c in argv[1]])
+        else:
+            for pb in ([0, 0, 0], [1, 0, 1], [1, 1, 1]):
+                print_story(pb)
     else:
         tour()
 

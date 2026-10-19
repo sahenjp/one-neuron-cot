@@ -31,11 +31,12 @@ Chain-of-Thought 生成として完全シミュレートできる、という表
 git clone https://github.com/sahenjp/one-neuron-cot && cd one-neuron-cot
 pip install numpy          # 唯一の依存
 python3 run.py             # 5秒ツアーデモ
-python3 run.py test        # 24件のユニットテスト
+python3 run.py test        # 27件のユニットテスト
 python3 run.py adder 3 110 011   # 3bit加算器を単一ニューロンのCoTで計算
 python3 run.py parity 4 1011
 python3 run.py verify      # 論文の主張を1件ずつ検証してレポート表示
 python3 run.py distill     # 「答えだけ vs CoTあり」学習非対称のデモ
+python3 run.py story 101   # ニューロン1個が気分プロンプトから一文を生成 (プロンプト0〜7で8通り)
 ```
 
 ブラウザで試すなら: **[1ニューロンCPUプレイグラウンド](https://sahenjp.github.io/one-neuron-cot/)** (プログラム→回路→単一ニューロンの構成を可視化。pythonの正解トークン列と相互検証済み)。
@@ -133,6 +134,7 @@ one_neuron_cot/
   sidon.py      # Erdős–Turán 型 Sidon/Golomb 集合 (Claim 1)
   circuits.py   # σ-circuit DSL + パリティ/加算器/ReLU-MLP/ランダム回路ビルダー
   simulate.py   # C.1 構成 (φ, w) + run_reference / run_fast
+  story.py      # ニューロン1個で一文を生成するデモ (prompt 3bit -> 文)
   learn.py      # CoT教師ありパーセプトロン (Corollary 2 の実験版)
   demo.py       # CLIデモ
 tests/test_one_neuron_cot.py
