@@ -160,17 +160,20 @@
   }
   function compose(prompt, opts) {
     opts = opts || {};
-    var sentences = opts.sentences || 2;
+    var sentences = opts.sentences;
     var jw = opts.jitter === undefined ? 1 : (opts.jitter === true ? 1 : (opts.jitter === false ? 0 : opts.jitter));
     var topics = detectTopics(prompt || "");
-    var ph = promptHash(prompt || "");
+    var nonce = opts.nonce === undefined ? 0 : opts.nonce;
+    var ph = (promptHash(prompt || "") ^ Math.imul(nonce + 1, 2654435761)) >>> 0;
+    if (sentences === undefined) sentences = 2 + (hash01(ph, 5, 9) > 0.55 ? 1 : 0);
     var w = WEIGHTS.w, BASE_N = WEIGHTS.baseCount, TN = TOPICS.length;
-    var out = "", log = [], prevTail = "";
+    var out = "", log = [], prevTail = "", used = {};
     for (var s2 = 0; s2 < sentences; s2++) {
       ROLES.forEach(function (role, ri) {
         var scores = role.parts.map(function (part, ci) {
           var g = ROLE_OFF[ri] + ci;
           var e = w[g];   // base 重み (w 領域1)
+          if (used[g]) e -= 2.5;   // 同じフレーズの再使用は減点
           part.want.forEach(function (t) {
             if (topics.indexOf(t) >= 0) e += w[BASE_N + g * TN + TIDX[t]];   // affinity (w 領域2)
           });
@@ -181,10 +184,11 @@
         for (var ci2 = 1; ci2 < scores.length; ci2++) if (scores[ci2] > scores[best]) best = ci2;
         if (jw > 0) {
           var pool = [];
-          role.parts.forEach(function (part, ci3) { if (scores[ci3] > scores[best] - 1.4) pool.push(ci3); });
+          role.parts.forEach(function (part, ci3) { if (scores[ci3] > scores[best] - 1.9) pool.push(ci3); });
           best = pool[Math.floor(hash01(s2 * 97 + ri, ph, 777) * pool.length) % pool.length];
         }
         var chosen = role.parts[best];
+        used[ROLE_OFF[ri] + best] = 1;
         var order = role.parts.map(function (part, ci4) { return ci4; });
         order.sort(function (a, b) { return scores[b] - scores[a]; });
         var top = order.slice(0, 3).map(function (ci5) { return [role.parts[ci5].t.slice(0, 6), scores[ci5]]; });
