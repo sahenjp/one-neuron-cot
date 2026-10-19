@@ -62,7 +62,7 @@ def tour():
     print("\n[4/4] テスト一式")
     _bar()
     print("  python3 run.py test    で 24 件の検証テストが動きます")
-    print("  python3 run.py verify 論文主張のレポート / distill 学習非対称デモ / playground/ はブラウザ用")
+    print("  python3 run.py verify 論文主張のレポート / distill 学習非対称デモ / docs/ はブラウザ用")
 
 
 def run_tests() -> int:

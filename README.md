@@ -127,7 +127,7 @@ E2Eの線形学習者は閾値関数クラスの表現力で頭打ちになる�
 
 ```
 run.py           # クイックデモ / テスト / verify / distill の入口
-playground/      # 1ニューロンCPUプレイグラウンド (依存なしHTML/JS, 自己検証つき)
+docs/      # 1ニューロンCPUプレイグラウンド (依存なしHTML/JS, 自己検証つき)
 requirements.txt
 one_neuron_cot/
   sidon.py      # Erdős–Turán 型 Sidon/Golomb 集合 (Claim 1)
