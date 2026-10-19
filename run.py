@@ -61,7 +61,8 @@ def tour():
 
     print("\n[4/4] テスト一式")
     _bar()
-    print("  python3 run.py test  で 19 件の検証テストが動きます")
+    print("  python3 run.py test    で 24 件の検証テストが動きます")
+    print("  python3 run.py verify 論文主張のレポート / distill 学習非対称デモ / playground/ はブラウザ用")
 
 
 def run_tests() -> int:
@@ -81,6 +82,16 @@ def main(argv: list[str]) -> None:
         demo.main(["parity", *argv[1:]])
     elif cmd in ("test", "tests"):
         sys.exit(run_tests())
+    elif cmd == "verify":
+        from one_neuron_cot.harness import run_verify_paper
+        summary = run_verify_paper(fast=not any(a == "full" for a in argv[1:]))
+        print(summary["report"])
+        sys.exit(0 if summary["all_passed"] else 1)
+    elif cmd == "distill":
+        from one_neuron_cot.asymmetry import run_demo
+        rows = run_demo()
+        ok = all(row["cot_acc"] == 1.0 for row in rows)
+        sys.exit(0 if ok else 1)
     else:
         tour()
 

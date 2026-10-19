@@ -31,10 +31,14 @@ Chain-of-Thought 生成として完全シミュレートできる、という表
 git clone https://github.com/sahenjp/one-neuron-cot && cd one-neuron-cot
 pip install numpy          # 唯一の依存
 python3 run.py             # 5秒ツアーデモ
-python3 run.py test        # 19件のユニットテスト
+python3 run.py test        # 24件のユニットテスト
 python3 run.py adder 3 110 011   # 3bit加算器を単一ニューロンのCoTで計算
 python3 run.py parity 4 1011
+python3 run.py verify      # 論文の主張を1件ずつ検証してレポート表示
+python3 run.py distill     # 「答えだけ vs CoTあり」学習非対称のデモ
 ```
+
+ブラウザで試すなら: **[1ニューロンCPUプレイグラウンド](https://sahenjp.github.io/one-neuron-cot/)** (プログラム→回路→単一ニューロンの構成を可視化。pythonの正解トークン列と相互検証済み)。
 
 `python3 run.py` の出力:
 
@@ -75,6 +79,35 @@ python3 run.py parity 4 1011
 
 T = O(s^2)・d = O(ns+s^2) が定数倍込みで確認できる。
 
+## 検証ハーネス (他の理論論文への適用)
+
+one_neuron_cot/harness.py は「主張1件 = 検証関数1本」を集めてレポートする最小エンジンで、
+one_neuron_cot/claims.py が本論文の主張 (Theorem 2/3, Property 1, サイズ上限, Corollary 2, …) を登録する。
+他の構成的証明の論文を検証するときは claims.py の Check 定義がそのままテンプレートになる。
+
+```
+$ python3 run.py verify
+| check         | claim                          | reference   | result | detail |
+| thm2-exact    | ARニューロン1個で回路を正確に再現   | Thm 2 / C.1 | PASS   | 3 circuits / all inputs; … |
+| cor2-learning | CoT軌跡から効率的に学習可能        | Corollary 2 | PASS   | parity3: conv=True, held-out 100% |
+**Summary: ALL PASS (7/7)**
+```
+
+(`run.py verify full` でより大きな回路まで検証)
+
+## CoT教示 vs 「答えだけ」(学習非対称, Corollary 2 vs 7)
+
+run.py distill: 同じ生徒構成に対し、教示を「最終ラベルのみ (E2E)」と「完全なCoT軌跡」で変えて比較する。
+
+```
+  parity3: E2E best-LTF  75.0% / E2E GD  50.0% / CoT   100%
+  parity4: E2E best-LTF  68.8% / E2E GD  50.0% / CoT   100%
+   adder2: E2E best-LTF  75.0% / E2E GD  50.0% / CoT   100%
+```
+
+E2Eの線形学習者は閾値関数クラスの表現力で頭打ちになる一方、軌跡を見せると未学習入力まで100%再現できる。
+(小規模な方向的実演であり、一方向関数前提の暗号学的困難性そのものを実証するものではない)
+
 ## 実装ノート (Appendix C.1 の構成)
 
 - 右寄り内積: ⟨w, ctx⟩ はコンテキスト末尾 d 座標を左ゼロパディングして内積。
@@ -93,7 +126,8 @@ T = O(s^2)・d = O(ns+s^2) が定数倍込みで確認できる。
 ## 構成
 
 ```
-run.py           # クイックデモ / テスト実行の入口
+run.py           # クイックデモ / テスト / verify / distill の入口
+playground/      # 1ニューロンCPUプレイグラウンド (依存なしHTML/JS, 自己検証つき)
 requirements.txt
 one_neuron_cot/
   sidon.py      # Erdős–Turán 型 Sidon/Golomb 集合 (Claim 1)

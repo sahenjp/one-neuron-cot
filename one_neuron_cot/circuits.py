@@ -158,12 +158,19 @@ def adder_circuit(k: int) -> Circuit:
     return Circuit(2 * k, gates, "threshold")
 
 
+def majority_circuit(n: int) -> Circuit:
+    """n ビット多数決 (単一ゲート: count >= floor(n/2)+1)。s = 1。"""
+    inputs = [(("x", q), 1.0) for q in range(n)]
+    gates = [Gate("maj", tuple(inputs), -(n // 2 + 1))]
+    return Circuit(n, gates, "threshold")
+
+
 def mlp_relu_circuit() -> Circuit:
     """小さなReLU MLP (n=3, 4隠れ+1出力 = s=5, Assumption 1)。"""
     W1 = [(1.0, -1.0, 0.5), (0.25, 0.5, -0.25), (-0.75, 1.0, 0.25), (0.5, 0.5, 0.5)]
     b1 = [0.0, -0.5, 0.5, -0.25]
     gates: list[Gate] = [
-        Gate(f"h{q}", [(("x", q2), W1[q][q2]) for q2 in range(3)] , b1[q])
+        Gate(f"h{q}", [(("x", q2), W1[q][q2]) for q2 in range(3)], b1[q])
         for q in range(4)
     ]
     W2 = (1.0, -0.5, 0.25, 0.75)

@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>1ニューロンCPU プレイグラウンド — 自己回帰CoT</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0d1117; color: #d8dee6;
+         font-family: system-ui, -apple-system, "Hiragino Sans", sans-serif;
+         line-height: 1.6; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 24px 20px 60px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h1 a { color: #58a6ff; font-weight: 400; font-size: 14px; margin-left: 8px; }
+  p.sub { margin: 0 0 18px; color: #8b949e; font-size: 13px; }
+  #banner { border: 1px solid #238636; background: #0f2417; color: #7ee787;
+            border-radius: 8px; padding: 8px 12px; font-size: 13px; margin-bottom: 18px; }
+  #banner.bad { border-color: #b62324; background: #25090a; color: #ff7b72; }
+  .card { border: 1px solid #30363d; border-radius: 10px; padding: 14px 16px;
+          margin: 14px 0; background: #10161d; }
+  .card h2 { font-size: 14px; margin: 0 0 10px; color: #79c0ff; }
+  .row { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+  select, input[type=range] { accent-color: #58a6ff; }
+  select { background: #161b22; color: #d8dee6; border: 1px solid #30363d;
+           border-radius: 6px; padding: 4px 8px; }
+  .chip { display: inline-block; background: #161b22; border: 1px solid #30363d;
+          border-radius: 999px; padding: 2px 10px; font-size: 12px; margin: 2px 6px 2px 0; }
+  .chip b { color: #79c0ff; font-family: ui-monospace, monospace; }
+  .bit { width: 34px; height: 34px; border-radius: 8px; border: 1px solid #30363d;
+         background: #161b22; color: #8b949e; font-size: 16px; cursor: pointer;
+         font-family: ui-monospace, monospace; }
+  .bit.on { background: #1f6feb33; border-color: #58a6ff; color: #79c0ff; }
+  #strip-wrap { overflow-x: auto; padding: 6px 2px; }
+  #strip { display: flex; gap: 1px; align-items: flex-end; height: 34px; }
+  .cell { width: 3px; height: 12px; background: #21262d; border-radius: 1px; flex: none; }
+  .cell.d { height: 30px; }
+  .cell.cur { outline: 1.5px solid #f0f6fc; }
+  #stepbar { width: 100%; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+  table.terms { border-collapse: collapse; width: 100%; font-size: 13px; }
+  table.terms td, table.terms th { border-bottom: 1px solid #21262d; padding: 3px 8px;
+        text-align: left; font-family: ui-monospace, monospace; }
+  table.terms .neg { color: #ff7b72; } table.terms .pos { color: #7ee787; }
+  .out { font-size: 30px; font-family: ui-monospace, monospace; color: #7ee787;
+         font-weight: 700; }
+  .muted { color: #8b949e; font-size: 12px; }
+  button.prim { background: #238636; border: 1px solid #2ea043; color: #fff;
+                border-radius: 6px; padding: 5px 14px; cursor: pointer; }
+  button.prim.off { background: #21262d; border-color: #30363d; }
+  footer { color: #8b949e; font-size: 12.5px; border-top: 1px solid #21262d;
+           margin-top: 26px; padding-top: 14px; }
+  footer code { color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>1ニューロンCPU プレイグラウンド <a href="https://arxiv.org/abs/2610.17283" target="_blank" rel="noopener">arXiv:2610.17283</a></h1>
+  <p class="sub">ニューロン1個 (重みベクトル w を共有) を自己回帰的に呼び出すだけで回路が計算できる — という構成の可視化。指定ステップ t_i にだけゲート値 C_i が現れ、他のステップはサプレッションで 0 になる。</p>
+  <div id="banner">検証中…</div>
+  <div class="card">
+    <div class="row">
+      <select id="program">
+        <option value="parity">パリティ (XOR)</option>
+        <option value="adder">加算器</option>
+        <option value="maj">多数決</option>
+      </select>
+      <label class="muted">パラメータ <span id="paramVal" class="mono"></span></label>
+      <input type="range" id="param" min="3" max="8" value="4" step="1">
+      <span id="bits" class="row"></span>
+      <button class="prim" id="play">▶ 自動再生</button>
+    </div>
+    <div id="chips" style="margin-top:10px"></div>
+  </div>
+  <div class="card">
+    <h2>生成されるトークン列 (<span id="tokLabel" class="mono"></span>)</h2>
+    <div id="strip-wrap"><div id="strip"></div></div>
+    <input type="range" id="stepbar" min="1" max="600" value="600" step="1">
+    <div class="muted">ステップ <span id="stepLabel" class="mono"></span> / <span id="stepMax" class="mono"></span> — 色付きが指定ステップ (ゲート値 C_i)、グレーはサプレッション (強制0)</div>
+  </div>
+  <div class="card">
+    <h2 id="detailTitle">ステップ詳細</h2>
+    <div id="detail"></div>
+  </div>
+  <div class="card">
+    <h2>出力 (最終ゲート = e2e)</h2>
+    <div class="row">
+      <div class="out" id="outVal">-</div>
+      <div id="outExplain" class="muted"></div>
+    </div>
+  </div>
+  <footer>
+    構成 (Appendix C.1 / Theorem 2): 長さ T=O(s^2) の Sidon/Golomb スケジューリングで、次元 d=2T+kT'=O(ns+s^2) の重みベクトル w=[v(T) | z_k(T') … z_1(T') | z(T)] を1個だけ用意し、自己回帰生成 g_t = 1[dot(w, 窓) ≥ 0] で s ゲートの回路をシミュレートする。JS再実装は python の正解トークン列と相互検証済み (<a href="https://github.com/sahenjp/one-neuron-cot" target="_blank" rel="noopener">リポジトリ</a>)。
+  </footer>
+</div>
+<script src="app.js"></script>
+<script src="fixtures.js"></script>
+<script>
+(function () {
+  "use strict";
+  var state = { plan: null, bits: [], tau: 1, timer: null, playing: false, cache: null };
+  var PARAM_RANGE = {
+    parity: { min: 3, max: 8, label: function (v) { return "n=" + v; } },
+    adder:  { min: 1, max: 4, label: function (v) { return "k=" + v + "bit"; } },
+    maj:    { min: 3, max: 9, label: function (v) { return "n=" + v; } },
+  };
+  function $(id) { return document.getElementById(id); }
+  function buildCircuit(kind, param) {
+    if (kind === "parity") return OneNeuron.parity(param);
+    if (kind === "adder") return OneNeuron.adder(param);
+    return OneNeuron.majority(param);
+  }
+  function rebuild() {
+    var kind = $("program").value;
+    var param = parseInt($("param").value, 10);
+    state.plan = OneNeuron.buildPlan(buildCircuit(kind, param));
+    state.cache = null;
+    state.bits = [];
+    for (var i = 0; i < state.plan.n; i++) state.bits.push((i % 3 === 0) ? 1 : 0);
+    state.tau = state.plan.T;
+    var pr = PARAM_RANGE[kind];
+    $("param").min = pr.min; $("param").max = pr.max;
+    $("paramVal").textContent = pr.label(param);
+    renderChips(); renderBits(); renderStrip(); renderSelfCheck();
+  }
+  function renderChips() {
+    var p = state.plan, html = "";
+    html += "<span class='chip'>ゲート数 s = <b>" + p.s + "</b></span>";
+    html += "<span class='chip'>次元 d = <b>" + p.d + "</b> (=2T+kT')</span>";
+    html += "<span class='chip'>生成長 T = <b>" + p.T + "</b></span>";
+    html += "<span class='chip'>k = <b>" + p.k + "</b></span>";
+    html += "<span class='chip'>margin = <b>+" + p.margin + "</b></span>";
+    html += "<span class='chip'>Sidon/Golomb a (先頭6) = <b>[" + p.t.slice(0, 6).join(", ") + ", …]</b></span>";
+    $("chips").innerHTML = html;
+    $("tokLabel").textContent = "T = " + p.T + " ステップ";
+    $("stepbar").max = p.T; $("stepbar").value = p.T;
+    $("stepMax").textContent = p.T;
+  }
+  function renderBits() {
+    var host = $("bits"); host.innerHTML = "";
+    for (var q = 0; q < state.bits.length; q++) {
+      (function (q2) {
+        var b = document.createElement("button");
+        b.className = "bit" + (state.bits[q2] ? " on" : "");
+        b.textContent = state.bits[q2];
+        b.title = "入力 x" + (q2 + 1);
+        b.onclick = function () {
+          state.bits[q2] = 1 - state.bits[q2];
+          state.cache = null;
+          b.className = "bit" + (state.bits[q2] ? " on" : "");
+          b.textContent = state.bits[q2];
+          renderStrip();
+        };
+        host.appendChild(b);
+      })(q);
+    }
+  }
+  function sim() {
+    if (!state.cache) state.cache = OneNeuron.simulate(state.plan, state.bits);
+    return state.cache;
+  }
+  function hue(i, s) { return Math.round(200 + 130 * i / Math.max(1, s)); }
+  function renderStrip() {
+    var p = state.plan, res = sim(), strip = $("strip");
+    var frag = document.createDocumentFragment();
+    var desAt = {};
+    for (var i = 0; i < p.s; i++) desAt[p.designated[i]] = i;
+    for (var t = 1; t <= p.T; t++) {
+      var c = document.createElement("div");
+      c.className = "cell";
+      if (Object.prototype.hasOwnProperty.call(desAt, t)) {
+        c.className += " d";
+        c.style.background = "hsl(" + hue(desAt[t], p.s) + ",70%,55%)";
+        c.title = "ステップ " + t + " : ゲート " + p.gates[desAt[t]].name;
+      } else {
+        c.title = "ステップ " + t + " : サプレッション → 0";
+      }
+      if (t === state.tau) c.className += " cur";
+      frag.appendChild(c);
+    }
+    strip.innerHTML = ""; strip.appendChild(frag);
+    $("stepbar").value = state.tau;
+    $("stepLabel").textContent = state.tau;
+    renderDetail(); renderOutput();
+  }
+  function renderDetail() {
+    var p = state.plan, res = sim(), tau = state.tau, step = null;
+    for (var i = 0; i < res.steps.length; i++) {
+      if (res.steps[i].tau === tau) { step = res.steps[i]; break; }
+    }
+    $("detailTitle").textContent = "ステップ " + tau + " / " + p.T + " の詳細";
+    if (!step) {
+      $("detail").innerHTML = "<div class='muted'>サプレッション・ステップ: 強制的に token=0。指定ステップ t_i(=a_(s+i)) だけがゲート発火する。</div>";
+      return;
+    }
+    var html = "<div class='muted' style='margin-bottom:6px'>指定ステップ (ゲート v" + (step.gate + 1) + " = <b>" + step.gateName + "</b>): preact = θ(+margin) + Σ 係数×値 ≥ 0 で発火</div>";
+    html += "<table class='terms'><tr><th>項</th><th>係数</th><th>値</th><th>寄与</th></tr>";
+    html += "<tr><td>θ (バイアス+margin)</td><td></td><td></td><td class='mono'>" + step.theta.toFixed(1) + "</td></tr>";
+    for (var j = 0; j < step.terms.length; j++) {
+      var td = step.terms[j];
+      var cls = td.prod < 0 ? "neg" : "pos";
+      html += "<tr><td>" + td.label + "</td><td>" + td.w + "</td><td>" + td.val + "</td><td class='" + cls + "'>" + td.prod.toFixed(1) + "</td></tr>";
+    }
+    html += "<tr><th>preact 合計</th><th></th><th></th><th class='mono'>" + step.pre.toFixed(1) + " → token " + step.out + "</th></tr>";
+    html += "</table>";
+    $("detail").innerHTML = html;
+  }
+  function renderOutput() {
+    var p = state.plan, res = sim(), out = res.tokens[p.T - 1];
+    var gv = OneNeuron.evalCircuit(p, state.bits);
+    var ok = (out === gv[p.s - 1]);
+    $("outVal").textContent = String(out);
+    $("outVal").style.color = ok ? "#7ee787" : "#ff7b72";
+    var kind = $("program").value, param = parseInt($("param").value, 10);
+    var explain = "ニューロンの生成 (最終)" + (ok ? " == " : " != ") + "回路評価 [" + gv.join(",") + "] の最終値";
+    if (kind === "adder") {
+      var a = 0, b = 0, i2;
+      for (i2 = 0; i2 < param; i2++) { a += state.bits[i2] * (1 << i2); b += state.bits[param + i2] * (1 << i2); }
+      explain = a + " + " + b + " = " + (a + b) + " → 最上位桁 " + out + " (回路=" + gv[p.s - 1] + ")";
+    } else if (kind === "maj") {
+      var ones = 0;
+      for (var q = 0; q < p.n; q++) ones += state.bits[q];
+      explain = "1 の個数 " + ones + "/" + p.n + " → 多数決 " + out + " (回路=" + gv[p.s - 1] + ")";
+    } else {
+      var ones2 = 0;
+      for (var q2 = 0; q2 < p.n; q2++) ones2 += state.bits[q2];
+      explain = "1 の個数 " + ones2 + " の偶奇 → パリティ " + out + " (回路=" + gv[p.s - 1] + ")";
+    }
+    $("outExplain").textContent = explain;
+  }
+  function renderSelfCheck() {
+    var c = OneNeuron.checkAll(state.plan);
+    var kind = $("program").value, param = parseInt($("param").value, 10);
+    var txt = "網羅検証: 全 " + c.total + " 入力で e2e " + c.e2e + "/" + c.total + ", Property1 " + c.prop + "/" + c.total;
+    if (typeof PLAYGROUND_FIXTURES !== "undefined") {
+      for (var i = 0; i < PLAYGROUND_FIXTURES.programs.length; i++) {
+        var fx = PLAYGROUND_FIXTURES.programs[i];
+        if (fx.kind !== kind || fx.param !== param) continue;
+        var plan2 = OneNeuron.buildPlan(buildCircuit(kind, param)), okN = 0;
+        for (var j = 0; j < fx.samples.length; j++) {
+          if (JSON.stringify(OneNeuron.simulate(plan2, fx.samples[j].bits).tokens) === JSON.stringify(fx.samples[j].tokens)) okN += 1;
+        }
+        txt += " | python正解列と完全一致 " + okN + "/" + fx.samples.length;
+      }
+    }
+    var good = (c.e2e === c.total && c.prop === c.total);
+    var b = $("banner");
+    b.className = good ? "" : "bad";
+    b.textContent = (good ? "✓ " : "✗ ") + txt + " — このJSはpython(one_neuron_cot)と同一構成の独立再実装です";
+  }
+  function setTau(v) {
+    state.tau = Math.max(1, Math.min(state.plan.T, v | 0));
+    $("stepbar").value = state.tau;
+    $("stepLabel").textContent = state.tau;
+    var kids = $("strip").children;
+    for (var i = 0; i < kids.length; i++) kids[i].className = kids[i].className.split(" cur").join("");
+    if (kids[state.tau - 1]) kids[state.tau - 1].className += " cur";
+    renderDetail();
+  }
+  $("program").onchange = rebuild;
+  $("param").oninput = rebuild;
+  $("stepbar").oninput = function () { stopPlay(); setTau(parseInt($("stepbar").value, 10)); };
+  $("play").onclick = function () {
+    if (state.playing) { stopPlay(); return; }
+    state.playing = true;
+    $("play").textContent = "⏸ 停止"; $("play").className = "prim off";
+    if (state.tau >= state.plan.T) setTau(0);
+    state.timer = setInterval(function () {
+      if (state.tau >= state.plan.T) { stopPlay(); return; }
+      setTau(state.tau + 1);
+    }, 6);
+  };
+  function stopPlay() {
+    state.playing = false;
+    if (state.timer) clearInterval(state.timer);
+    $("play").textContent = "▶ 自動再生"; $("play").className = "prim";
+  }
+  rebuild();
+})();
+</script>
+</body>
+</html>
