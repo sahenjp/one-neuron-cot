@@ -17,8 +17,10 @@ from .simulate import build_neuron, designated_values, run_fast
 def build_story_circuit() -> Circuit:
     """3bit の気分プロンプトから「今日の見通し」ゲート列を組み立てる。"""
     gates: list[Gate] = []
-    gates.append(Gate("genki", ((("x", 0), 1.0),), -0.5))
-    gates.append(Gate("rain", ((("x", 1), -1.0),), 0.5))
+    # NOTE: バイアスは整数に保つ (threshold は 1[preact>=0]、build_neuron の
+    # margin +0.5 でも境界を跨がないため。半端バイアスだと発火が反転する)
+    gates.append(Gate("genki", ((("x", 0), 1.0),), -1.0))
+    gates.append(Gate("rain", ((("x", 1), -1.0),), 0.0))
     gates.append(Gate("and01", ((("x", 0), 1.0), (("x", 1), 1.0)), -2.0))
     gates.append(Gate("or01", ((("x", 0), 1.0), (("x", 1), 1.0)), -1.0))
     gates.append(Gate("and2", ((("x", 2), 1.0), (("g", 3), 1.0)), -2.0))

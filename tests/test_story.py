@@ -24,6 +24,15 @@ class TestStory(unittest.TestCase):
         self.assertEqual([e["val"] for e in r["log"]],
                          circuit.forward(X)[0].astype(int).tolist())
 
+    def test_designated_values_match_circuit_for_all_prompts(self):
+        # margin +0.5 しても発火が反転しないことを全 8 プロンプトで確認
+        for bits in itertools.product([0, 1], repeat=3):
+            r = generate(list(bits))
+            expected = build_story_circuit().forward(
+                np.array([bits], dtype=float))[0].astype(int).tolist()
+            self.assertEqual([e["val"] for e in r["log"]], expected,
+                             msg="neuron vs circuit mismatch at " + str(bits))
+
     def test_prompt_changes_story(self):
         texts = {tuple(p): generate(p)["text"] for p in ([0, 0, 0], [1, 1, 1])}
         self.assertNotEqual(texts[(0, 0, 0)], texts[(1, 1, 1)])
