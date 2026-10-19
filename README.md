@@ -25,12 +25,29 @@ Chain-of-Thought 生成として完全シミュレートできる、という表
 > }
 > ```
 
-## 実行方法
+## クイックスタート (30秒)
 
 ```bash
-python3 -m unittest tests.test_one_neuron_cot     # 19 tests
-python3 -m one_neuron_cot.demo adder 3 110 011    # デモ
-python3 -m one_neuron_cot.demo parity 4 1011
+git clone https://github.com/sahenjp/one-neuron-cot && cd one-neuron-cot
+pip install numpy          # 唯一の依存
+python3 run.py             # 5秒ツアーデモ
+python3 run.py test        # 19件のユニットテスト
+python3 run.py adder 3 110 011   # 3bit加算器を単一ニューロンのCoTで計算
+python3 run.py parity 4 1011
+```
+
+`python3 run.py` の出力:
+
+```
+[1/4] 3bit加算器を「ニューロン1個」で計算する
+      回路: 7 ゲート -> ニューロン: 次元 d=1567, 生成長 T=446
+      重みベクトルは 1 個だけ。同じベクトルを T 回呼んで回路を再現します。
+      入力 x = 110011 (110 + 011)
+      e2e 出力 = 0 = sum bit2 (110+011 = 1001, carry = 1)
+[2/4] 全 64 入力で「回路 == ニューロン」を確認
+      一致 64/64
+[3/4] 学習: 教師のCoT軌跡だけから生徒ニューロンを学習 (Corollary 2)
+      学習入力の全軌跡を完全再現し、未学習 2 入力の一致率 100%
 ```
 
 ## 論文の主張 ↔ テスト対応表
@@ -76,6 +93,8 @@ T = O(s^2)・d = O(ns+s^2) が定数倍込みで確認できる。
 ## 構成
 
 ```
+run.py           # クイックデモ / テスト実行の入口
+requirements.txt
 one_neuron_cot/
   sidon.py      # Erdős–Turán 型 Sidon/Golomb 集合 (Claim 1)
   circuits.py   # σ-circuit DSL + パリティ/加算器/ReLU-MLP/ランダム回路ビルダー
