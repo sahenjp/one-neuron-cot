@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>1ニューロン文章ジェネレータ — 自己回帰CoT</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0d1117; color: #d8dee6;
+         font-family: system-ui, -apple-system, "Hiragino Sans", sans-serif; line-height: 1.6; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 24px 20px 60px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h1 a { color: #58a6ff; font-weight: 400; font-size: 14px; margin-left: 8px; }
+  p.sub { margin: 0 0 16px; color: #8b949e; font-size: 13px; }
+  .card { border: 1px solid #30363d; border-radius: 10px; padding: 14px 16px; margin: 14px 0; background: #10161d; }
+  .card h2 { font-size: 14px; margin: 0 0 10px; color: #79c0ff; }
+  textarea, input[type=text] { width: 100%; background: #161b22; color: #d8dee6;
+    border: 1px solid #30363d; border-radius: 8px; padding: 8px 10px; font-size: 14px;
+    font-family: inherit; }
+  textarea { height: 140px; resize: vertical; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  button.prim { background: #238636; border: 1px solid #2ea043; color: #fff; border-radius: 6px;
+    padding: 6px 16px; cursor: pointer; font-size: 14px; }
+  button.prim.off { background: #21262d; border-color: #30363d; }
+  button.gray { background: #21262d; border: 1px solid #30363d; color: #d8dee6; border-radius: 6px;
+    padding: 6px 12px; cursor: pointer; }
+  .chip { display: inline-block; background: #161b22; border: 1px solid #30363d;
+    border-radius: 999px; padding: 2px 10px; font-size: 12px; margin: 2px 6px 2px 0; }
+  .chip b { color: #79c0ff; font-family: ui-monospace, monospace; }
+  #out { min-height: 120px; font-size: 18px; line-height: 1.9; white-space: pre-wrap;
+    background: #0a0e13; border: 1px solid #21262d; border-radius: 8px; padding: 12px; }
+  #inner { font-family: ui-monospace, monospace; font-size: 12px; color: #8b949e;
+    margin-top: 8px; white-space: pre-wrap; }
+  .muted { color: #8b949e; font-size: 12px; }
+  footer { color: #8b949e; font-size: 12.5px; border-top: 1px solid #21262d; margin-top: 26px; padding-top: 14px; }
+  footer code { color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>1ニューロン文章ジェネレータ <a href="https://arxiv.org/abs/2610.17283" target="_blank" rel="noopener">arXiv:2610.17283</a></h1>
+  <p class="sub">学習データ(下の文章、自由に書き換えてください)から「次の1文字」を予測する単一ニューロン (重みベクトル1本) を学習し、入力の続きを1トークン(=1ビット)ずつ自己回帰生成します。プリセットの出力はありません。文は重みから組み上がります。</p>
+  <div class="card">
+    <h2>学習データ (編集可 → 再学習)</h2>
+    <textarea id="corpus"></textarea>
+    <div class="row" style="margin-top:10px">
+      <button class="prim" id="train">学習する</button>
+      <span id="stats"></span>
+    </div>
+  </div>
+  <div class="card">
+    <h2>プロンプト</h2>
+    <div class="row">
+      <input type="text" id="prompt" value="今日は" style="flex:1;min-width:200px">
+      <button class="prim" id="gen">生成する</button>
+      <button class="gray" id="halt">停止</button>
+      <label class="muted"><input type="checkbox" id="showInner"> ニューロン内部を表示</label>
+      <label class="muted"><input type="checkbox" id="temp" checked> ゆらぎ（温度 0.7）</label>
+    </div>
+    <div id="out" style="margin-top:10px"></div>
+    <div id="inner"></div>
+    <div class="muted" id="tok" style="margin-top:6px"></div>
+  </div>
+  <footer>
+    仕組み: 「次の1文字」を B ビットのコードに分解し、ビット位置ごとの多数決を
+    スロット (前々文字, 前文字, ビット位置) と (前文字, ビット位置) の1hot窓で学習。
+    どちらも <code>g = 1[w・x >= 0]</code> の同じ閾値ニューロン (重み w 1本を全スロットで共有)。
+    生成では学習済み w で全語彙のエネルギーを採点し、温度つきで次の1文字を選ぶ (温度0で決定論)。
+    スロットが役割を決める構成は、論文の Sidon スケジューリングと同じ発想の簡易版です。
+    質は学習データのマルコフ性に依存し、GPT級の文法は出ません。繰り返しが出たらゆらぎを切ってみてください。
+    <a href="index.html" target="_blank" rel="noopener">構成のプレイグラウンド</a> /
+    <a href="https://github.com/sahenjp/one-neuron-cot" target="_blank" rel="noopener">リポジトリ</a>
+  </footer>
+</div>
+<script src="lm.js"></script>
+<script>
+(function () {
+  "use strict";
+  var CORPUS_DEFAULT = "今日は朝から空が澄んでいて、遠くの山の線まで見える。風が北から流れて、街のざわめきをやわらげる。午後には雲が出て、光がやさしくなる。雨の日は部屋のすみで本を読む。窓をたたく音が一定で、心が整う。雨が上がると、街のにおいが変わる。ぬれた道と珈琲の香り。夜になると空に星がにじむ。数えるのはやめて、ただながめる。明日はまた別の空が来る。同じようで、どこかがちがう。読書のあいまに短い散歩をする。かどをひとつ曲がるだけで十分だ。珈琲をいれる手順はきまっている。豆をひき、湯をまち、ゆっくりそそぐ。音楽は低い音からながし始める。窓の外とリズムがかさなる。小さな発見を集めると、一日は思ったより長くなる。帰りみち、空のいろが三回かわった。どれも一瞬の出来事だった。気分と天気は、たまにだけ重なる。進むのが正解とはかぎらない。止まることも、みちのうちだ。よふけにペンをはしらせる。あしたの自分にてがみをのこす気分で。";
+  var model = null, timer = null, generating = false;
+  function $(id) { return document.getElementById(id); }
+  function train() {
+    var text = $("corpus").value.replace(/\s+/g, "");
+    if (text.length < 10) { alert("学習データが短すぎます"); return; }
+    model = OneNeuronLM.buildLM(text, { maxEpochs: 60 });
+    var pct = (model.acc * 100).toFixed(1);
+    $("stats").innerHTML =
+      "<span class='chip'>語彙 D = <b>" + model.D + "</b></span>" +
+      "<span class='chip'>文字コード = <b>" + model.B + " bit</b></span>" +
+      "<span class='chip'>重み次元 = <b>" + model.F.toLocaleString() + "</b></span>" +
+      "<span class='chip'>学習精度 = <b>" + pct + "%</b></span>" +
+      "<span class='chip'>エポック = <b>" + model.epochs + "</b> / 誤り <b>" + model.bestErr + "</b></span>" +
+      "<span class='chip'>重みベクトル = <b>1本 (全トークン共有)</b></span>";
+  }
+  function stopGen() {
+    generating = false;
+    if (timer) clearInterval(timer);
+    $("gen").textContent = "生成する"; $("gen").className = "prim";
+  }
+  function gen() {
+    if (!model) train();
+    if (!model) return;
+    if (generating) { stopGen(); return; }
+    var prompt = $("prompt").value;
+    var N = 60;
+    var text = "", idx = 0, tokens = 0;
+    generating = true;
+    $("gen").textContent = "停止"; $("gen").className = "prim off";
+    $("out").textContent = prompt;
+    $("inner").textContent = "";
+    timer = setInterval(function () {
+      if (!generating) { stopGen(); return; }
+      var gk = model.generate(prompt, idx + 2, { temp: $("temp").checked ? 0.7 : 0 });
+      var log = gk.log;
+      var entry = log[log.length - 2];
+      var ch = entry.ch;
+      text += ch;
+      tokens += model.B;
+      $("out").textContent = prompt + text;
+      $("tok").textContent = "生成トークン: " + tokens + " / 文字: " + text.length;
+      if ($("showInner").checked) {
+        var parts = [];
+        for (var sc = 0; sc < entry.top.length; sc++) {
+          parts.push(entry.top[sc][0] + "(" + entry.top[sc][1].toFixed(1) + ")");
+        }
+        $("inner").textContent = "文脈 [" + entry.pair.join("") + "]"
+          + (entry.bigram ? " (2文字文脈)" : " (1文字文脈)")
+          + " → 「" + ch + "」  候補エネルギー: " + parts.join("  ");
+      }
+      idx++;
+      if (idx >= N) stopGen();
+    }, 45);
+  }
+  $("train").onclick = function () { stopGen(); train(); };
+  $("gen").onclick = gen;
+  $("halt").onclick = stopGen;
+  $("corpus").value = CORPUS_DEFAULT;
+  train();
+})();
+</script>
+</body>
+</html>

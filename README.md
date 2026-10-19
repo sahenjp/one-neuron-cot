@@ -39,7 +39,7 @@ python3 run.py distill     # 「答えだけ vs CoTあり」学習非対称の�
 python3 run.py story 101   # ニューロン1個が気分プロンプトから一文を生成 (プロンプト0〜7で8通り)
 ```
 
-ブラウザで試すなら: **[1ニューロンCPUプレイグラウンド](https://sahenjp.github.io/one-neuron-cot/)** (プログラム→回路→単一ニューロンの構成を可視化。pythonの正解トークン列と相互検証済み)。
+ブラウザで試すなら: **[1ニューロンCPUプレイグラウンド](https://sahenjp.github.io/one-neuron-cot/)** (プログラム→回路→単一ニューロンの構成を可視化。pythonの正解トークン列と相互検証済み)。文章生成のみ試すなら**: [1ニューロン文章ジェネレータ](https://sahenjp.github.io/one-neuron-cot/generator.html)** (学習データを貼ると重みを学習し、入力の続きを生成)。
 
 `python3 run.py` の出力:
 
@@ -128,7 +128,7 @@ E2Eの線形学習者は閾値関数クラスの表現力で頭打ちになる�
 
 ```
 run.py           # クイックデモ / テスト / verify / distill の入口
-docs/      # 1ニューロンCPUプレイグラウンド (依存なしHTML/JS, 自己検証つき)
+docs/      # プレイグラウンド + 文章ジェネレータ (依存なしHTML/JS, 自己検証つき)
 requirements.txt
 one_neuron_cot/
   sidon.py      # Erdős–Turán 型 Sidon/Golomb 集合 (Claim 1)
