@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.paper.pdf
+.paper_full.txt
+.paper_2610.17283.html
+.paper_2610.17283.txt
